@@ -48,9 +48,12 @@ where K: Eq + Hash
         arg: &'a D
     )
     where I: Iterator<Item=(K, V)> + 'a,
-          K: Clone
+          K: Clone,
+          K: Display,
+          V: Display,
     {
         for (t, h) in iterf(arg) {
+            println!("Inserting: title: {t}, href: {h}, index: {al}", al = self.arr_len);
             self.map.insert(t.clone(), h);
             self.array.push(t);
             self.arr_len += 1;
@@ -127,6 +130,10 @@ macro_rules! read_buf {
     more power
     faster
     better
+
+    distinguish between probs. sections
+    within the 'active section-task', there is an h3 tag that belongs to the category of the probs.
+    you can create kinda buckets for that
 */
 
 fn main() -> Result<(), reqwest::Error> {
@@ -288,12 +295,31 @@ fn task_iter<'a>(doc: &'a Document) -> impl Iterator<Item=(usize, &'a str)> + 'a
                         .flat_map(move |div|
                             div
                             .find(Name("a"))
-                            .filter_map(|a|
-                                Some((
-                                    a.attr("title")?.parse::<usize>().unwrap(),
-                                    a.attr("href")?
-                                ))
-                            )
+                            .filter_map(|a| {
+                                let title = a.attr("title")?;
+                                println!("title: {}, href: {}", title, a.attr("href")?);
+                                if let Some(f) = title.chars().nth(0) {
+                                    if f.eq(&'§') {
+                                    // 5520 -> paragraph -> first letter -> p -> 'P' ascii code * 69
+                                        let title = 5520 + title[2..]
+                                            .split_whitespace()
+                                            .map(|d| d.parse::<usize>().expect("Failed to convert to usize"))
+                                            .sum::<usize>();
+                                        Some((
+                                            title,
+                                            a.attr("href")?
+                                        ))
+                                    }
+                                    else {
+                                        Some((
+                                            a.attr("title")?.parse::<usize>().expect("Failed to convert to usize"),
+                                            a.attr("href")?
+                                        ))
+                                    }
+                                } else {
+                                    None
+                                }
+                            })
                         )
                     )
                 )
