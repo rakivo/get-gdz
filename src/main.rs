@@ -167,7 +167,7 @@ fn main() -> Result<(), reqwest::Error> {
             .get(parsed_choice)
             .expect("Index out of bounds: {book_choice}");
         let url = format!("{GDZ_URL}{url}", url = books_ds.map.get(choosen).unwrap());
-        println!("You choosed: {url}");
+        println!("You chose: {url}");
 
         let gdz_tasks_response = client.get(url).send().expect("Failed to send request");
         if gdz_tasks_response.status().is_success() {
@@ -187,7 +187,7 @@ fn main() -> Result<(), reqwest::Error> {
                 .expect("Failed to convert {book_choice} to usize");
 
             let url = format!("{GDZ_URL}{url}", url = tasks_ds.map.get(&parsed_choice).expect("No such task in here"));
-            println!("You selected: {url}, see solutions for this problem in current directory");
+            println!("You chose: {url}, see solutions for this problem in current directory");
 
             let gdz_task_response = client.get(url.to_owned()).send().expect("Failed to send request");
             if gdz_task_response.status().is_success() {
