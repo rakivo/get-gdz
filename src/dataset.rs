@@ -27,13 +27,6 @@ pubstructT!(
     }
 );
 
-/*pub struct DataSet<K, V> {
-    array: Vec<K>,
-    arr_len: usize,
-    user_choice: String,
-    map: HashMap<K, V>,
-}*/
-
 impl<K, V> DataSet<K, V>
 where K: Eq + Hash
 {
