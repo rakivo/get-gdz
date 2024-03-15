@@ -53,7 +53,7 @@ where K: Eq + Hash
           V: Display,
     {
         for (t, h) in iterf(arg) {
-            println!("Inserting: title: {t}, href: {h}, index: {al}", al = self.arr_len);
+            // println!("Inserting: title: {t}, href: {h}, index: {al}", al = self.arr_len);
             self.map.insert(t.clone(), h);
             self.array.push(t);
             self.arr_len += 1;
@@ -115,7 +115,6 @@ macro_rules! get_books_from_class  {
 macro_rules! read_buf {
     ($rbuf: expr => $buf: ident) => {
         $rbuf.read_line(&mut $buf).ok();
-        let $buf = $buf.trim().to_owned();
     };
     (f $rbuf: expr => $buf: ident.$($field: ident).*) => {
         $rbuf.read_line(&mut $buf.$($field).*).ok();
@@ -139,18 +138,25 @@ macro_rules! read_buf {
 fn main() -> Result<(), reqwest::Error> {
     let client = Client::new();
 
-    let mut rbuf  = BufReader::new(std::io::stdin().lock());
-    let mut class = String::new();
-    let mut subj  = String::new();
+    let mut rbuf   = BufReader::new(std::io::stdin().lock());
+    let mut degree = String::new();
+    let mut subj   = String::new();
 
-    println!("Enter a class, from 7 to 11");
-    read_buf!(rbuf => class);
+    println!("Enter a degree");
+    read_buf!(rbuf => degree);
+    let parsed_degree = degree
+            .trim()
+            .parse::<usize>()
+            .expect(&format!("Failed to convert {degree} to usize"));
+    if parsed_degree < 1 || parsed_degree > 11 {
+        println!("haha, funny..");
+        return Ok(());
+    }
     println!("Enter a subject");
     read_buf!(rbuf => subj);
 
-    let url = get_books_from_class!(class, subj);
-    println!("Url: {url}");
-
+    let url = get_books_from_class!(degree, subj);
+    // println!("URL: {url}");
     let gdz_books_response = client.get(url).send().expect("Failed to send request");
 
     if gdz_books_response.status().is_success() {
@@ -173,7 +179,7 @@ fn main() -> Result<(), reqwest::Error> {
             .array
             .get(parsed_choice)
             .expect("Index out of bounds: {book_choice}");
-        let url = format!("{GDZ_URL}{url}", url = books_ds.map.get(choosen).unwrap());
+        let url = format!("{GDZ_URL}{url}", url = books_ds.map.get(choosen).expect("No such book in here"));
         println!("You chose: {url}");
 
         let gdz_tasks_response = client.get(url).send().expect("Failed to send request");
@@ -192,6 +198,10 @@ fn main() -> Result<(), reqwest::Error> {
                 .trim()
                 .parse::<usize>()
                 .expect("Failed to convert {book_choice} to usize");
+            if parsed_choice >= tasks_ds.arr_len {
+                println!("You can't even manage yourself to select a task within the given range. I'm sorry but I can not help you with that.");
+                return Ok(());
+            }
 
             let url = format!("{GDZ_URL}{url}", url = tasks_ds.map.get(&parsed_choice).expect("No such task in here"));
             println!("You chose: {url}, see solutions for this problem in current directory");
@@ -212,6 +222,8 @@ fn main() -> Result<(), reqwest::Error> {
         } else {
             println!("ERROR: {status}", status = gdz_tasks_response.status());
         }
+    } else {
+        println!("ERROR: {status}", status = gdz_books_response.status());
     }
 
     Ok(())
@@ -297,7 +309,7 @@ fn task_iter<'a>(doc: &'a Document) -> impl Iterator<Item=(usize, &'a str)> + 'a
                             .find(Name("a"))
                             .filter_map(|a| {
                                 let title = a.attr("title")?;
-                                println!("title: {}, href: {}", title, a.attr("href")?);
+                                // println!("title: {}, href: {}", title, a.attr("href")?);
                                 if let Some(f) = title.chars().nth(0) {
                                     if f.eq(&'§') {
                                     // 5520 -> paragraph -> first letter -> p -> 'P' ascii code * 69
