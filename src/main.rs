@@ -1,6 +1,7 @@
 use std::{
     fs::File,
     hash::Hash,
+    fmt::Display,
     io::{
         self,
         BufReader,
@@ -16,7 +17,6 @@ use select::{
         Name
     },
     predicate::Predicate,
-    node::Node,
     document::Document
 };
 
@@ -41,7 +41,12 @@ where K: Eq + Hash
         }
     }
 
-    pub fn collect<'a, D, I>(&mut self, iterf: impl Fn(&'a D) -> I, arg: &'a D)
+    pub fn collect<'a, D, I>
+    (
+        &mut self,
+        iterf: impl Fn(&'a D) -> I,
+        arg: &'a D
+    )
     where I: Iterator<Item=(K, V)> + 'a,
           K: Clone
     {
@@ -60,23 +65,21 @@ where K: Eq + Hash
         cl: &'a Client
     ) -> Result<(), reqwest::Error>
     where I: Iterator<Item=(K, V)> + 'a,
-          K: Clone
+          K: Display
     {
         let mut index = 0;
-        for img in img_iter(arg) {
-            if let Some(image_src) = img.attr("src") {
-                let img_resp = cl.get(format!("https:{image_src}")).send()?;
-                if img_resp.status().is_success() {
-                    let image_data = img_resp.bytes()?;
-                    let file_name = format!("image{index}.jpg");
+        for (img_src, _img_alt) in iterf(arg) {
+            let img_resp = cl.get(format!("https:{img_src}")).send()?;
+            if img_resp.status().is_success() {
+                let image_data = img_resp.bytes()?;
+                let file_name = format!("image{index}.jpg");
 
-                    println!("Saving: {image_src} to {file_name}");
-                    io::copy(&mut image_data.as_ref(),
-                             &mut File::create(file_name).expect("Failed to create file")
-                    ).expect("Failed to save image");
-                } else {
-                    println!("Failed to fetch image: {status}", status = img_resp.status());
-                }
+                println!("Saving: {img_src} to {file_name}");
+                io::copy(&mut image_data.as_ref(),
+                            &mut File::create(file_name).expect("Failed to create file")
+                ).expect("Failed to save image");
+            } else {
+                println!("Failed to fetch image: {status}", status = img_resp.status());
             }
             index += 1;
         }
@@ -140,16 +143,6 @@ fn main() -> Result<(), reqwest::Error> {
         let body = gdz_books_response.text().expect("Failed to get body of response");
         let document = Document::from(body.as_str());
 
-        /*
-        ...s -> array
-
-        ..._len -> len int
-
-        ...choice -> string
-
-        ... map -> map
-        */
-
         let mut books_ds = DataSet::<&str, &str>::new();
         books_ds.collect(book_iter, &document);
 
@@ -194,24 +187,11 @@ fn main() -> Result<(), reqwest::Error> {
                 let body = gdz_task_response.text().expect("Failed to get body of response");
                 let document = Document::from(body.as_str());
 
-                let mut index = 0;
-                for img in img_iter(&document) {
-                    if let Some(image_src) = img.attr("src") {
-                        let image_response = client.get(format!("https:{image_src}")).send()?;
-                        if image_response.status().is_success() {
-                            let image_data = image_response.bytes()?;
-                            let file_name = format!("image{index}.jpg");
-
-                            println!("Saving: {image_src} to {file_name}");
-                            io::copy(&mut image_data.as_ref(),
-                                     &mut File::create(file_name).expect("Failed to create file")
-                            ).expect("Failed to save image");
-                        } else {
-                            println!("Failed to fetch image: {status}", status = image_response.status());
-                        }
-                    }
-                    index += 1;
-                }
+                let mut img_ds = DataSet::<&str, &str>::new();
+                img_ds
+                    .collect_imgs(img_iter, &document, &client)
+                    .map_err(|err| eprintln!("ERROR: {err}"))
+                    .ok();
             } else {
                 println!("ERROR: {status}", status = gdz_task_response.status());
             }
@@ -223,7 +203,7 @@ fn main() -> Result<(), reqwest::Error> {
     Ok(())
 }
 
-fn img_iter<'a>(doc: &'a Document) -> impl Iterator<Item=Node<'a>> {
+fn img_iter<'a>(doc: &'a Document) -> impl Iterator<Item=(&'a str, &'a str)> + 'a {
     doc
     .find(Name("div").and(Class("layout")))
     .flat_map(|l|
@@ -242,7 +222,11 @@ fn img_iter<'a>(doc: &'a Document) -> impl Iterator<Item=Node<'a>> {
                     .flat_map(move |tic|
                         tic
                         .find(Class("with-overtask"))
-                        .flat_map(move |wo| wo.find(Name("img")))
+                        .flat_map(move |wo|
+                            wo
+                            .find(Name("img"))
+                            .filter_map(|img| Some((img.attr("src")?, img.attr("alt")?)))
+                        )
                     )
                 )
             )
@@ -250,7 +234,7 @@ fn img_iter<'a>(doc: &'a Document) -> impl Iterator<Item=Node<'a>> {
     )
 }
 
-fn book_iter<'a>(doc: &'a Document) -> impl Iterator<Item = (&'a str, &'a str)> + 'a {
+fn book_iter<'a>(doc: &'a Document) -> impl Iterator<Item=(&'a str, &'a str)> + 'a {
     doc
     .find(Name("div").and(Class("layout")))
     .flat_map(|l|
@@ -276,7 +260,7 @@ fn book_iter<'a>(doc: &'a Document) -> impl Iterator<Item = (&'a str, &'a str)> 
     )
 }
 
-fn task_iter<'a>(doc: &'a Document) -> impl Iterator<Item = (usize, &'a str)> + 'a {
+fn task_iter<'a>(doc: &'a Document) -> impl Iterator<Item=(usize, &'a str)> + 'a {
     doc
     .find(Name("div").and(Class("layout")))
     .flat_map(|l|
