@@ -1,5 +1,6 @@
 use std::{
     fs::File,
+    hash::Hash,
     io::{
         self,
         BufReader,
@@ -21,6 +22,83 @@ use select::{
 
 const GDZ_URL: &str = "https://gdz.ru";
 
+struct DataSet<K, V> {
+    array: Vec<K>,
+    arr_len: usize,
+    user_choice: String,
+    map: HashMap<K, V>
+}
+
+impl<K, V> DataSet<K, V>
+where K: Eq + Hash
+{
+    pub fn new () -> DataSet<K, V> {
+        DataSet {
+            array: Vec::new(),
+            arr_len: 0,
+            user_choice: String::new(),
+            map: HashMap::new()
+        }
+    }
+
+    pub fn collect<'a, D, I>(&mut self, iterf: impl Fn(&'a D) -> I, arg: &'a D)
+    where I: Iterator<Item=(K, V)> + 'a,
+          K: Clone
+    {
+        for (t, h) in iterf(arg) {
+            self.map.insert(t.clone(), h);
+            self.array.push(t);
+            self.arr_len += 1;
+        }
+    }
+
+    pub fn collect_imgs<'a, I>
+    (
+        &mut self,
+        iterf: impl Fn(&'a Document) -> I,
+        arg: &'a Document,
+        cl: &'a Client
+    ) -> Result<(), reqwest::Error>
+    where I: Iterator<Item=(K, V)> + 'a,
+          K: Clone
+    {
+        let mut index = 0;
+        for img in img_iter(arg) {
+            if let Some(image_src) = img.attr("src") {
+                let img_resp = cl.get(format!("https:{image_src}")).send()?;
+                if img_resp.status().is_success() {
+                    let image_data = img_resp.bytes()?;
+                    let file_name = format!("image{index}.jpg");
+
+                    println!("Saving: {image_src} to {file_name}");
+                    io::copy(&mut image_data.as_ref(),
+                             &mut File::create(file_name).expect("Failed to create file")
+                    ).expect("Failed to save image");
+                } else {
+                    println!("Failed to fetch image: {status}", status = img_resp.status());
+                }
+            }
+            index += 1;
+        }
+        Ok(())
+    }
+}
+
+/*
+...s -> array
+
+..._len -> len int
+
+...choice -> string
+
+... map -> map
+
+let mut books = Vec::new();
+let mut books_len = 0;
+let mut book_choice = String::new();
+let mut books_map = HashMap::new();
+*/
+
 macro_rules! get_books_from_class  {
     ($class: expr, $subj: expr) => {
         format!("{GDZ_URL}/class-{cl}/{su}", cl = $class.to_lowercase(), su = $subj.to_lowercase())
@@ -28,9 +106,12 @@ macro_rules! get_books_from_class  {
 }
 
 macro_rules! read_buf {
-    ($buf: ident <- $rbuf: ident) => {
+    ($rbuf: expr => $buf: ident) => {
         $rbuf.read_line(&mut $buf).ok();
         let $buf = $buf.trim().to_owned();
+    };
+    (f $rbuf: expr => $buf: ident.$field: ident) => {
+        $rbuf.read_line(&mut $buf.$field).ok();
     };
 }
 
@@ -46,9 +127,9 @@ fn main() -> Result<(), reqwest::Error> {
     let mut subj  = String::new();
 
     println!("Enter the class, from 7 to 11");
-    read_buf!(class <- rbuf);
+    read_buf!(rbuf => class);
     println!("Enter the subject");
-    read_buf!(subj  <- rbuf);
+    read_buf!(rbuf => subj);
 
     let url = get_books_from_class!(class, subj);
     println!("Url: {url}");
@@ -59,26 +140,33 @@ fn main() -> Result<(), reqwest::Error> {
         let body = gdz_books_response.text().expect("Failed to get body of response");
         let document = Document::from(body.as_str());
 
-        let mut books = Vec::new();
-        let mut books_len = 0;
-        let mut book_choice = String::new();
-        let mut books_map = HashMap::new();
+        /*
+        ...s -> array
 
-        for (title, href) in book_iter(&document) {
-            books_map.insert(title, href);
-            books.push(title);
-            books_len += 1;
-        }
-        println!("Books: {books:#?}");
-        println!("Which one is yours? from 0 to {books_len}");
-        read_buf!(book_choice <- rbuf);
-        let parsed_choice = book_choice
+        ..._len -> len int
+
+        ...choice -> string
+
+        ... map -> map
+        */
+
+        let mut books_ds = DataSet::<&str, &str>::new();
+        books_ds.collect(book_iter, &document);
+
+        println!("Books: {books:#?}", books = books_ds.array);
+        println!("Which one is yours? from 0 to {books_len}", books_len = books_ds.arr_len);
+        read_buf!(f rbuf => books_ds.user_choice);
+
+        let parsed_choice = books_ds
+            .user_choice
+            .trim()
             .parse::<usize>()
-            .expect("Failed to convert {book_choice} to usize");
-        let choosen = books
+            .expect(&format!("Failed to convert {book_choice} to usize", book_choice = books_ds.user_choice));
+        let choosen = books_ds
+            .array
             .get(parsed_choice)
             .expect("Index out of bounds: {book_choice}");
-        let url = format!("{GDZ_URL}{url}", url = books_map.get(choosen).unwrap());
+        let url = format!("{GDZ_URL}{url}", url = books_ds.map.get(choosen).unwrap());
         println!("You choosed: {url}");
 
         let gdz_tasks_response = client.get(url).send().expect("Failed to send request");
@@ -86,22 +174,19 @@ fn main() -> Result<(), reqwest::Error> {
             let body = gdz_tasks_response.text().expect("Failed to get body of response");
             let document = Document::from(body.as_str());
 
-            let mut tasks = HashMap::new();
-            let mut tasks_len = 0;
-            let mut task_choice = String::new();
-            for (href, no) in task_iter(&document) {
-                println!("href: {href}, no: {no}");
-                tasks.insert(no, href);
-                tasks_len += 1;
-            }
-            println!("Now select task, from 0 to {tasks_len}");
-            read_buf!(task_choice <- rbuf);
+            let mut tasks_ds = DataSet::<usize, &str>::new();
+            tasks_ds.collect(task_iter, &document);
 
-            let parsed_choice = task_choice
+            println!("Now select task, from 0 to {tasks_len}", tasks_len = tasks_ds.arr_len);
+            read_buf!(f rbuf => tasks_ds.user_choice);
+
+            let parsed_choice = tasks_ds
+                .user_choice
+                .trim()
                 .parse::<usize>()
                 .expect("Failed to convert {book_choice} to usize");
 
-            let url = format!("{GDZ_URL}{url}", url = tasks.get(&parsed_choice).expect("No such task in here"));
+            let url = format!("{GDZ_URL}{url}", url = tasks_ds.map.get(&parsed_choice).expect("No such task in here"));
             println!("You selected: {url}, see solutions for this problem in curr. dir.");
 
             let gdz_task_response = client.get(url.to_owned()).send().expect("Failed to send request");
@@ -165,7 +250,7 @@ fn img_iter<'a>(doc: &'a Document) -> impl Iterator<Item=Node<'a>> {
     )
 }
 
-fn book_iter<'a>(doc: &'a Document) -> impl Iterator<Item = (&'a str, &'a str)> {
+fn book_iter<'a>(doc: &'a Document) -> impl Iterator<Item = (&'a str, &'a str)> + 'a {
     doc
     .find(Name("div").and(Class("layout")))
     .flat_map(|l|
@@ -191,7 +276,7 @@ fn book_iter<'a>(doc: &'a Document) -> impl Iterator<Item = (&'a str, &'a str)> 
     )
 }
 
-fn task_iter<'a>(doc: &'a Document) -> impl Iterator<Item = (&'a str, usize)> + 'a {
+fn task_iter<'a>(doc: &'a Document) -> impl Iterator<Item = (usize, &'a str)> + 'a {
     doc
     .find(Name("div").and(Class("layout")))
     .flat_map(|l|
@@ -214,9 +299,8 @@ fn task_iter<'a>(doc: &'a Document) -> impl Iterator<Item = (&'a str, usize)> + 
                             .find(Name("a"))
                             .filter_map(|a|
                                 Some((
-                                    a.attr("href")?,
-                                    a.attr("title")?.parse::<usize>()
-                                     .expect("Failed to convert title to usize")
+                                    a.attr("title")?.parse::<usize>().unwrap(),
+                                    a.attr("href")?
                                 ))
                             )
                         )
