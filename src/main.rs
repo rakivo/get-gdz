@@ -1,109 +1,29 @@
-use std::{
-    fs::File,
-    hash::Hash,
-    fmt::Display,
-    io::{
-        self,
-        BufReader,
-        BufRead
-    },
-    collections::HashMap
+use std::io::{
+    BufReader,
+    BufRead
 };
 
 use reqwest::blocking::Client;
-use select::{
-    predicate::{
-        Class,
-        Name
-    },
-    predicate::Predicate,
-    document::Document
-};
+use select::document::Document;
+
+mod iters;
+mod dataset;
+
+use dataset::*;
+use iters::*;
 
 const GDZ_URL: &str = "https://gdz.ru";
 
-struct DataSet<K, V> {
-    array: Vec<K>,
-    arr_len: usize,
-    user_choice: String,
-    map: HashMap<K, V>
-}
-
-impl<K, V> DataSet<K, V>
-where K: Eq + Hash
-{
-    pub fn new () -> DataSet<K, V> {
-        DataSet {
-            array: Vec::new(),
-            arr_len: 0,
-            user_choice: String::new(),
-            map: HashMap::new()
-        }
-    }
-
-    pub fn collect<'a, D, I>
-    (
-        &mut self,
-        iterf: impl Fn(&'a D) -> I,
-        arg: &'a D
-    )
-    where I: Iterator<Item=(K, V)> + 'a,
-          K: Clone,
-          K: Display,
-          V: Display,
-    {
-        for (t, h) in iterf(arg) {
-            // println!("Inserting: title: {t}, href: {h}, index: {al}", al = self.arr_len);
-            self.map.insert(t.clone(), h);
-            self.array.push(t);
-            self.arr_len += 1;
-        }
-    }
-
-    pub fn collect_imgs<'a, D, I>
-    (
-        &mut self,
-        iterf: impl Fn(&'a D) -> I,
-        arg: &'a D,
-        cl: &'a Client,
-        mut start: usize
-    ) -> Result<(), reqwest::Error>
-    where I: Iterator<Item=(K, V)> + 'a,
-          K: Display,
-          V: Display,
-    {
-        for (img_src, img_alt) in iterf(arg) {
-            let img_resp = cl.get(format!("https:{img_src}")).send()?;
-            if img_resp.status().is_success() {
-                let image_data = img_resp.bytes()?;
-                let file_name = format!("image{start}.jpg");
-
-                println!("Saving: {img_src} with alt: {img_alt} to {file_name}");
-                io::copy(&mut image_data.as_ref(),
-                            &mut File::create(file_name).expect("Failed to create file")
-                ).expect("Failed to save image");
-            } else {
-                println!("Failed to fetch image: {status}", status = img_resp.status());
-            }
-            start += 1;
-        }
-        Ok(())
-    }
-}
-
 /*
-...s -> array
+...s                -> array
+..._len             -> len int
+..._choice          -> string
+map                 -> map
 
-..._len -> len int
-
-...choice -> string
-
-... map -> map
-
-let mut books = Vec::new();
-let mut books_len = 0;
+let mut books       = Vec::new();
+let mut books_len   = 0;
 let mut book_choice = String::new();
-let mut books_map = HashMap::new();
+let mut books_map   = HashMap::new();
 */
 
 macro_rules! get_books_from_class  {
@@ -227,115 +147,4 @@ fn main() -> Result<(), reqwest::Error> {
     }
 
     Ok(())
-}
-
-fn img_iter<'a>(doc: &'a Document) -> impl Iterator<Item=(&'a str, &'a str)> + 'a {
-    doc
-    .find(Name("div").and(Class("layout")))
-    .flat_map(|l|
-        l
-        .find(Class("page"))
-        .flat_map(move |p|
-            p
-            .find(Name("main")
-            .and(Class("content")))
-            .flat_map(move |mc|
-                mc
-                .find(Name("figure"))
-                .flat_map(move |f|
-                    f
-                    .find(Class("task-img-container"))
-                    .flat_map(move |tic|
-                        tic
-                        .find(Class("with-overtask"))
-                        .flat_map(move |wo|
-                            wo
-                            .find(Name("img"))
-                            .filter_map(|img| Some((img.attr("src")?, img.attr("alt")?)))
-                        )
-                    )
-                )
-            )
-        )
-    )
-}
-
-fn book_iter<'a>(doc: &'a Document) -> impl Iterator<Item=(&'a str, &'a str)> + 'a {
-    doc
-    .find(Name("div").and(Class("layout")))
-    .flat_map(|l|
-        l
-        .find(Class("page"))
-        .flat_map(move |p|
-            p.find(Name("main").and(Class("content")))
-            .flat_map(move |c|
-                c
-                .find(Class("book__list"))
-                .flat_map(move |ul|
-                    ul
-                    .find(Class("book__item"))
-                    .flat_map(move |bi|
-                        bi
-                        .find(Name("a")
-                        .and(Class("book__link")))
-                        .filter_map(|a| Some((a.attr("title")?, a.attr("href")?)))
-                    )
-                )
-            )
-        )
-    )
-}
-
-fn task_iter<'a>(doc: &'a Document) -> impl Iterator<Item=(usize, &'a str)> + 'a {
-    doc
-    .find(Name("div").and(Class("layout")))
-    .flat_map(|l|
-        l
-        .find(Name("div").and(Class("page")))
-        .flat_map(move |p|
-            p
-            .find(Name("main").and(Class("content")))
-            .flat_map(move |c|
-                c.find(Class("task__list")
-                 .and(Class("folded")))
-                 .flat_map(move |tl|
-                     tl
-                     .find(Class("active").and(Class("section-task")))
-                     .flat_map(move |s|
-                        s
-                        .find(Name("div"))
-                        .flat_map(move |div|
-                            div
-                            .find(Name("a"))
-                            .filter_map(|a| {
-                                let title = a.attr("title")?;
-                                // println!("title: {}, href: {}", title, a.attr("href")?);
-                                if let Some(f) = title.chars().nth(0) {
-                                    if f.eq(&'§') {
-                                    // 5520 -> paragraph -> first letter -> p -> 'P' ascii code * 69
-                                        let title = 5520 + title[2..]
-                                            .split_whitespace()
-                                            .map(|d| d.parse::<usize>().expect("Failed to convert to usize"))
-                                            .sum::<usize>();
-                                        Some((
-                                            title,
-                                            a.attr("href")?
-                                        ))
-                                    }
-                                    else {
-                                        Some((
-                                            a.attr("title")?.parse::<usize>().expect("Failed to convert to usize"),
-                                            a.attr("href")?
-                                        ))
-                                    }
-                                } else {
-                                    None
-                                }
-                            })
-                        )
-                    )
-                )
-            )
-        )
-    )
 }
