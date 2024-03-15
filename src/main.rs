@@ -215,7 +215,8 @@ fn task_iter<'a>(doc: &'a Document) -> impl Iterator<Item = (&'a str, usize)> + 
                             .filter_map(|a|
                                 Some((
                                     a.attr("href")?,
-                                    a.attr("title")?.parse::<usize>().expect("Failed to convert title to usize")
+                                    a.attr("title")?.parse::<usize>()
+                                     .expect("Failed to convert title to usize")
                                 ))
                             )
                         )

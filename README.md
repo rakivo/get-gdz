@@ -1,4 +1,4 @@
-## [get-gdz](https://github.com/rakivo/get-gdz) is a command line tool to make homework process easier to russian students.
+## [get-gdz](https://github.com/rakivo/get-gdz) is a command line tool to make homework process easier for Russian students.
 
 ### Usage:
 
