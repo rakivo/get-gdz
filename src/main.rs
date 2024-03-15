@@ -57,31 +57,32 @@ where K: Eq + Hash
         }
     }
 
-    pub fn collect_imgs<'a, I>
+    pub fn collect_imgs<'a, D, I>
     (
         &mut self,
-        iterf: impl Fn(&'a Document) -> I,
-        arg: &'a Document,
-        cl: &'a Client
+        iterf: impl Fn(&'a D) -> I,
+        arg: &'a D,
+        cl: &'a Client,
+        mut start: usize
     ) -> Result<(), reqwest::Error>
     where I: Iterator<Item=(K, V)> + 'a,
-          K: Display
+          K: Display,
+          V: Display,
     {
-        let mut index = 0;
-        for (img_src, _img_alt) in iterf(arg) {
+        for (img_src, img_alt) in iterf(arg) {
             let img_resp = cl.get(format!("https:{img_src}")).send()?;
             if img_resp.status().is_success() {
                 let image_data = img_resp.bytes()?;
-                let file_name = format!("image{index}.jpg");
+                let file_name = format!("image{start}.jpg");
 
-                println!("Saving: {img_src} to {file_name}");
+                println!("Saving: {img_src} with alt: {img_alt} to {file_name}");
                 io::copy(&mut image_data.as_ref(),
                             &mut File::create(file_name).expect("Failed to create file")
                 ).expect("Failed to save image");
             } else {
                 println!("Failed to fetch image: {status}", status = img_resp.status());
             }
-            index += 1;
+            start += 1;
         }
         Ok(())
     }
@@ -113,13 +114,19 @@ macro_rules! read_buf {
         $rbuf.read_line(&mut $buf).ok();
         let $buf = $buf.trim().to_owned();
     };
-    (f $rbuf: expr => $buf: ident.$field: ident) => {
-        $rbuf.read_line(&mut $buf.$field).ok();
+    (f $rbuf: expr => $buf: ident.$($field: ident).*) => {
+        $rbuf.read_line(&mut $buf.$($field).*).ok();
     };
 }
 
 /* TODO:
     clean code
+    simplify code
+    more abstractions
+    more abilities
+    more power
+    faster
+    better
 */
 
 fn main() -> Result<(), reqwest::Error> {
@@ -129,9 +136,9 @@ fn main() -> Result<(), reqwest::Error> {
     let mut class = String::new();
     let mut subj  = String::new();
 
-    println!("Enter the class, from 7 to 11");
+    println!("Enter a class, from 7 to 11");
     read_buf!(rbuf => class);
-    println!("Enter the subject");
+    println!("Enter a subject");
     read_buf!(rbuf => subj);
 
     let url = get_books_from_class!(class, subj);
@@ -180,7 +187,7 @@ fn main() -> Result<(), reqwest::Error> {
                 .expect("Failed to convert {book_choice} to usize");
 
             let url = format!("{GDZ_URL}{url}", url = tasks_ds.map.get(&parsed_choice).expect("No such task in here"));
-            println!("You selected: {url}, see solutions for this problem in curr. dir.");
+            println!("You selected: {url}, see solutions for this problem in current directory");
 
             let gdz_task_response = client.get(url.to_owned()).send().expect("Failed to send request");
             if gdz_task_response.status().is_success() {
@@ -189,7 +196,7 @@ fn main() -> Result<(), reqwest::Error> {
 
                 let mut img_ds = DataSet::<&str, &str>::new();
                 img_ds
-                    .collect_imgs(img_iter, &document, &client)
+                    .collect_imgs(img_iter, &document, &client, 0)
                     .map_err(|err| eprintln!("ERROR: {err}"))
                     .ok();
             } else {
