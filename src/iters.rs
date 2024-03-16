@@ -29,7 +29,7 @@ pub fn img_iter<'a>(doc: &'a Document) -> impl Iterator<Item=(&'a str, &'a str)>
                         .flat_map(move |wo|
                             wo
                             .find(Name("img"))
-                            .filter_map(|img| Some((img.attr("src")?, img.attr("alt")?)))
+                            .filter_map(|img| Some((img.attr("src")?.trim(), img.attr("alt")?.trim())))
                         )
                     )
                 )
@@ -56,7 +56,7 @@ pub fn book_iter<'a>(doc: &'a Document) -> impl Iterator<Item=(&'a str, &'a str)
                         bi
                         .find(Name("a")
                         .and(Class("book__link")))
-                        .filter_map(|a| Some((a.attr("title")?, a.attr("href")?)))
+                        .filter_map(|a| Some((a.attr("title")?.trim(), a.attr("href")?.trim())))
                     )
                 )
             )
@@ -97,7 +97,7 @@ pub fn task_iter<'a>(doc: &'a Document) -> impl Iterator<Item=(usize, &'a str)> 
                                             .sum::<usize>();
                                         Some((
                                             title,
-                                            a.attr("href")?
+                                            a.attr("href")?.trim()
                                         ))
                                     }
                                     else {

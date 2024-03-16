@@ -1,14 +1,12 @@
 use std::{
-    io::{
-        self,
-        Write
-    },
     fs::File,
+    io::Write,
     hash::Hash,
     fmt::Display,
     collections::HashMap
 };
 
+#[allow(unused)]
 macro_rules! pubstructLT {
     ($name: ident<$lt: lifetime, $($T: tt),*> {
        $($field: ident: $t:ty,) *
@@ -29,17 +27,29 @@ macro_rules! pubstructT {
     }
 }
 
+/*
+buckets:
+    U is a bucket, most often this is just enums, like Book, Degree, Subject & etc.
+    in bucket we have vector of (most often) titles, like name of book, no. of task,
+    and (most often) hrefs to the item.
+
+sizes:
+    U is a bucket as well, just like in "buckets", in here we can
+    have a length of the (title, href) vector of the given bucket.
+*/
+
 pubstructT!(
-    DataSet<K, V> {
-        buckets: HashMap<K, Vec<(K, V)>>,
-        sizes: HashMap<K, usize>,
+    DataSet<U, K, V> {
+        buckets: HashMap<U, Vec<(K, V)>>,
+        sizes: HashMap<U, usize>,
     }
 );
 
-impl<K, V> DataSet<K, V>
-where K: Eq + Hash
+impl<U, K, V> DataSet<U, K, V>
+where U: Eq + Hash,
+      K: Eq + Hash
 {
-    pub fn new () -> DataSet<K, V> {
+    pub fn new () -> DataSet<U, K, V> {
         DataSet {
             buckets: HashMap::new(),
             sizes: HashMap::new(),
@@ -51,10 +61,11 @@ where K: Eq + Hash
         &mut self,
         iterf: impl Fn(&'a D) -> I,
         arg: &'a D,
-        buck: K
+        buck: U
     )
     where I: Iterator<Item=(K, V)> + 'a,
-          K: Clone + Display,
+          U: Clone,
+          K: Display,
           V: Display
     {
         let mut bucket = Vec::new();
@@ -67,7 +78,7 @@ where K: Eq + Hash
         self.buckets.entry(buck).or_insert(bucket);
     }
 
-    // this is also in doubtful way of doing that
+    // this is also definitely not the best way to do that.
     pub fn collect_imgs<'a, D, I>
     (
         &mut self,
@@ -86,13 +97,19 @@ where K: Eq + Hash
                 let file_name = format!("image{start}.jpg");
 
                 println!("Saving: {img_src} with alt: {img_alt} to {file_name}");
-                let mut f = File::create(file_name).expect("Failed to create file");
-                f.write_all(&img_data).map_err(|err| eprintln!("ERROR WRITING TO THE FILE: {err}")).ok();
+                let mut file = File::create(file_name).expect("Failed to create file");
+                file.write_all(&img_data)
+                    .map_err(|err| eprintln!("ERROR WRITING TO THE FILE: {err}"))
+                    .ok();
             } else {
                 println!("Failed to fetch image: {status}", status = img_resp.status_code);
             }
             start += 1;
         }
         Ok(())
+    }
+
+    pub fn get_books(&self, buck: U) -> Option<&Vec<(K, V)>> {
+        self.buckets.get(&buck)
     }
 }
