@@ -10,4 +10,5 @@
 
 #### References of the used dependencies:
 > minreq - https://github.com/neonmoe/minreq/
+
 > select - https://github.com/utkarshkukreti/select.rs
