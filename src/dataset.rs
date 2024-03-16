@@ -1,17 +1,28 @@
 use std::{
+    io::{
+        self,
+        Write
+    },
+    fs::File,
     hash::Hash,
     fmt::Display,
-    fs::File,
-    io,
     collections::HashMap
 };
-use reqwest::blocking::Client;
+
+macro_rules! pubstructLT {
+    ($name: ident<$lt: lifetime, $($T: tt),*> {
+       $($field: ident: $t:ty,) *
+    }) => {
+        pub struct $name<$lt, $($T),*> {
+            $(pub $field: $t), *
+        }
+    }
+}
 
 macro_rules! pubstructT {
     ($name: ident<$($T: tt),*> {
        $($field: ident: $t:ty,) *
     }) => {
-        #[derive(Debug)]
         pub struct $name<$($T),*> {
             $(pub $field: $t), *
         }
@@ -20,10 +31,8 @@ macro_rules! pubstructT {
 
 pubstructT!(
     DataSet<K, V> {
-        array: Vec<K>,
-        arr_len: usize,
-        user_choice: String,
-        map: HashMap<K, V>,
+        buckets: HashMap<K, Vec<(K, V)>>,
+        sizes: HashMap<K, usize>,
     }
 );
 
@@ -32,10 +41,8 @@ where K: Eq + Hash
 {
     pub fn new () -> DataSet<K, V> {
         DataSet {
-            array: Vec::new(),
-            arr_len: 0,
-            user_choice: String::new(),
-            map: HashMap::new()
+            buckets: HashMap::new(),
+            sizes: HashMap::new(),
         }
     }
 
@@ -43,45 +50,46 @@ where K: Eq + Hash
     (
         &mut self,
         iterf: impl Fn(&'a D) -> I,
-        arg: &'a D
+        arg: &'a D,
+        buck: K
     )
     where I: Iterator<Item=(K, V)> + 'a,
-          K: Clone,
-          K: Display,
-          V: Display,
+          K: Clone + Display,
+          V: Display
     {
+        let mut bucket = Vec::new();
+        let size = self.sizes.entry(buck.clone()).or_insert(0);
         for (t, h) in iterf(arg) {
-            // println!("Inserting: title: {t}, href: {h}, index: {al}", al = self.arr_len);
-            self.map.insert(t.clone(), h);
-            self.array.push(t);
-            self.arr_len += 1;
+            println!("Inserting: title: {t}, href: {h}");
+            bucket.push((t, h));
+            *size += 1;
         }
+        self.buckets.entry(buck).or_insert(bucket);
     }
 
+    // this is also in doubtful way of doing that
     pub fn collect_imgs<'a, D, I>
     (
         &mut self,
         iterf: impl Fn(&'a D) -> I,
         arg: &'a D,
-        cl: &'a Client,
         mut start: usize
-    ) -> Result<(), reqwest::Error>
+    ) -> Result<(), minreq::Error>
     where I: Iterator<Item=(K, V)> + 'a,
           K: Display,
-          V: Display,
+          V: Display
     {
         for (img_src, img_alt) in iterf(arg) {
-            let img_resp = cl.get(format!("https:{img_src}")).send()?;
-            if img_resp.status().is_success() {
-                let image_data = img_resp.bytes()?;
+            let img_resp = minreq::get(format!("https:{img_src}")).send()?;
+            if img_resp.status_code == 200 {
+                let img_data = img_resp.into_bytes();
                 let file_name = format!("image{start}.jpg");
 
                 println!("Saving: {img_src} with alt: {img_alt} to {file_name}");
-                io::copy(&mut image_data.as_ref(),
-                            &mut File::create(file_name).expect("Failed to create file")
-                ).expect("Failed to save image");
+                let mut f = File::create(file_name).expect("Failed to create file");
+                f.write_all(&img_data).map_err(|err| eprintln!("ERROR WRITING TO THE FILE: {err}")).ok();
             } else {
-                println!("Failed to fetch image: {status}", status = img_resp.status());
+                println!("Failed to fetch image: {status}", status = img_resp.status_code);
             }
             start += 1;
         }
