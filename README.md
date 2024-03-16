@@ -8,4 +8,6 @@
 #### TODO:
 > finish usage section
 
-###### I'm not using any API's, just parsing htmls.
+#### References of the used dependencies:
+> minreq - https://github.com/neonmoe/minreq/
+> select - https://github.com/utkarshkukreti/select.rs
