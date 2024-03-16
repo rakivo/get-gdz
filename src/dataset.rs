@@ -40,14 +40,15 @@ sizes:
 
 pubstructT!(
     DataSet<U, T, H> {
-        buckets: HashMap<U, Vec<(K, V)>>,
+        buckets: HashMap<U, Vec<(T, H)>>,
         sizes: HashMap<U, usize>,
     }
 );
 
 impl<U, T, H> DataSet<U, T, H>
 where U: Eq + Hash,
-      K: Eq + Hash
+      T: Display,
+      H: Display
 {
     pub fn new () -> DataSet<U, T, H> {
         DataSet {
@@ -66,8 +67,6 @@ where U: Eq + Hash,
     where I: Iterator<Item=(T, H)> + 'a,
           F: Fn(&'a D) -> I,
           U: Clone,
-          K: Display,
-          V: Display
     {
         let mut bucket = Vec::new();
         let size = self.sizes.entry(buck.clone()).or_insert(0);
@@ -80,17 +79,15 @@ where U: Eq + Hash,
     }
 
     // this is also definitely not the best way to do that.
-    pub fn collect_imgs<'a, D, I>
+    pub fn collect_imgs<'a, F, D, I>
     (
         &mut self,
         iterf: F,
         arg: &'a D,
         mut start: usize
     ) -> Result<(), minreq::Error>
-    where I: Iterator<Item=(K, V)> + 'a,
+    where I: Iterator<Item=(T, H)> + 'a,
           F: Fn(&'a D) -> I,
-          K: Display,
-          V: Display
     {
         for (img_src, img_alt) in iterf(arg) {
             let img_resp = minreq::get(format!("https:{img_src}")).send()?;
@@ -111,7 +108,7 @@ where U: Eq + Hash,
         Ok(())
     }
 
-    pub fn get_books(&self, buck: U) -> Option<&Vec<(K, V)>> {
+    pub fn get_books(&self, buck: U) -> Option<&Vec<(T, H)>> {
         self.buckets.get(&buck)
     }
 }
