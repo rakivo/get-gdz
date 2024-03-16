@@ -8,7 +8,7 @@
 #### TODO:
 > finish usage section
 
-#### References of the used dependencies:
+#### References of the used crates:
 > minreq - https://github.com/neonmoe/minreq/
 
 > select - https://github.com/utkarshkukreti/select.rs
