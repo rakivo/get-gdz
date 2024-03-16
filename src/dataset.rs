@@ -39,31 +39,32 @@ sizes:
 */
 
 pubstructT!(
-    DataSet<U, K, V> {
+    DataSet<U, T, H> {
         buckets: HashMap<U, Vec<(K, V)>>,
         sizes: HashMap<U, usize>,
     }
 );
 
-impl<U, K, V> DataSet<U, K, V>
+impl<U, T, H> DataSet<U, T, H>
 where U: Eq + Hash,
       K: Eq + Hash
 {
-    pub fn new () -> DataSet<U, K, V> {
+    pub fn new () -> DataSet<U, T, H> {
         DataSet {
             buckets: HashMap::new(),
             sizes: HashMap::new(),
         }
     }
 
-    pub fn collect<'a, D, I>
+    pub fn collect<'a, F, D, I>
     (
         &mut self,
-        iterf: impl Fn(&'a D) -> I,
+        iterf: F,
         arg: &'a D,
         buck: U
     )
-    where I: Iterator<Item=(K, V)> + 'a,
+    where I: Iterator<Item=(T, H)> + 'a,
+          F: Fn(&'a D) -> I,
           U: Clone,
           K: Display,
           V: Display
@@ -82,11 +83,12 @@ where U: Eq + Hash,
     pub fn collect_imgs<'a, D, I>
     (
         &mut self,
-        iterf: impl Fn(&'a D) -> I,
+        iterf: F,
         arg: &'a D,
         mut start: usize
     ) -> Result<(), minreq::Error>
     where I: Iterator<Item=(K, V)> + 'a,
+          F: Fn(&'a D) -> I,
           K: Display,
           V: Display
     {
@@ -97,12 +99,12 @@ where U: Eq + Hash,
                 let file_name = format!("image{start}.jpg");
 
                 println!("Saving: {img_src} with alt: {img_alt} to {file_name}");
-                let mut file = File::create(file_name).expect("Failed to create file");
+                let mut file = File::create(file_name).expect("ERROR: Failed to create file");
                 file.write_all(&img_data)
                     .map_err(|err| eprintln!("ERROR WRITING TO THE FILE: {err}"))
                     .ok();
             } else {
-                println!("Failed to fetch image: {status}", status = img_resp.status_code);
+                println!("ERROR: Failed to fetch image: {status}", status = img_resp.status_code);
             }
             start += 1;
         }
