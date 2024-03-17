@@ -181,7 +181,7 @@ fn ask_and_get_no<'a, R: std::io::Read>
 ) -> Result<String, String> {
     nos_ds.collect(no_iter, &doc, book);
 
-    let nos_len = nos_ds.sizes.get(&Subject::Algebra).unwrap_or(&0);
+    let nos_len = nos_ds.sizes.get(&book).unwrap_or(&0);
     println!("Now select no., from 0 to {nos_len}");
 
     let mut user_choice = String::new();
