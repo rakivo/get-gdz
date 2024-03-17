@@ -8,10 +8,10 @@ use std::{
 
 #[allow(unused)]
 macro_rules! pubstructLT {
-    ($name: ident<$lt: lifetime, $($T: tt),*> {
+    ($name: ident<$lt: lifetime, $($T: tt), *> {
        $($field: ident: $t:ty,) *
     }) => {
-        pub struct $name<$lt, $($T),*> {
+        pub struct $name<$lt, $($T), *> {
             $(pub $field: $t), *
         }
     }
@@ -50,7 +50,7 @@ where U: Eq + Hash,
       T: Display,
       H: Display
 {
-    pub fn new () -> DataSet<U, T, H> {
+    pub fn new() -> DataSet<U, T, H> {
         DataSet {
             buckets: HashMap::new(),
             sizes: HashMap::new(),
@@ -78,7 +78,7 @@ where U: Eq + Hash,
         self.buckets.entry(buck).or_insert(bucket);
     }
 
-    // this is also definitely not the best way to do that.
+    // this is also definitely not the best way of doing that.
     pub fn collect_imgs<'a, F, D, I>
     (
         &mut self,
@@ -108,6 +108,7 @@ where U: Eq + Hash,
         Ok(())
     }
 
+    #[inline]
     pub fn get_books(&self, buck: U) -> Option<&Vec<(T, H)>> {
         self.buckets.get(&buck)
     }
