@@ -64,7 +64,7 @@ pub fn book_iter<'a>(doc: &'a Document) -> impl Iterator<Item=(&'a str, &'a str)
     )
 }
 
-pub fn task_iter<'a>(doc: &'a Document) -> impl Iterator<Item=(usize, &'a str)> + 'a {
+pub fn no_iter<'a>(doc: &'a Document) -> impl Iterator<Item=(usize, &'a str)> + 'a {
     doc
     .find(Name("div").and(Class("layout")))
     .flat_map(|l|

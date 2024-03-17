@@ -62,7 +62,7 @@ where U: Eq + Hash,
         &mut self,
         iterf: F,
         arg: &'a D,
-        buck: U
+        buck: &'a U
     )
     where I: Iterator<Item=(T, H)> + 'a,
           F: Fn(&'a D) -> I,
@@ -71,17 +71,17 @@ where U: Eq + Hash,
         let mut bucket = Vec::new();
         let size = self.sizes.entry(buck.clone()).or_insert(0);
         for (t, h) in iterf(arg) {
-            println!("Inserting: title: {t}, href: {h}");
+            // println!("Inserting: title: {t}, href: {h}");
             bucket.push((t, h));
             *size += 1;
         }
-        self.buckets.entry(buck).or_insert(bucket);
+        self.buckets.entry(buck.clone()).or_insert(bucket);
     }
 
     // this is also definitely not the best way of doing that.
     pub fn collect_imgs<'a, F, D, I>
     (
-        &mut self,
+        &self,
         iterf: F,
         arg: &'a D,
         mut start: usize
@@ -95,11 +95,9 @@ where U: Eq + Hash,
                 let img_data = img_resp.into_bytes();
                 let file_name = format!("image{start}.jpg");
 
-                println!("Saving: {img_src} with alt: {img_alt} to {file_name}");
+                println!("Saving: {img_src} with alt: {img_alt} into the {file_name}");
                 let mut file = File::create(file_name).expect("ERROR: Failed to create file");
-                file.write_all(&img_data)
-                    .map_err(|err| eprintln!("ERROR WRITING TO THE FILE: {err}"))
-                    .ok();
+                file.write_all(&img_data).map_err(|err| eprintln!("ERROR WRITING TO THE FILE: {err}")).ok();
             } else {
                 println!("ERROR: Failed to fetch image: {status}", status = img_resp.status_code);
             }
@@ -109,7 +107,7 @@ where U: Eq + Hash,
     }
 
     #[inline]
-    pub fn get_books(&self, buck: U) -> Option<&Vec<(T, H)>> {
-        self.buckets.get(&buck)
+    pub fn get_from_bucket(&self, buck: &U) -> Option<&Vec<(T, H)>> {
+        self.buckets.get(buck)
     }
 }
