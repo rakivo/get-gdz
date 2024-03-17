@@ -15,20 +15,20 @@ use iters::*;
 use dataset::*;
 
 #[derive(Eq, Hash, PartialEq, Clone, Debug)]
-pub enum Book {
+pub enum Subject {
     Algebra,
-    English,
+    English
     // ...
 }
 
-impl FromStr for Book {
+impl FromStr for Subject {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "algebra" => Ok(Book::Algebra),
-            "english" => Ok(Book::English),
-            _ => Err(format!("Failed to convert '{s}' to Book variant")),
+            "algebra" => Ok(Subject::Algebra),
+            "english" => Ok(Subject::English),
+            _         => Err(format!("Failed to convert '{s}' to Subject variant"))
         }
     }
 }
@@ -113,7 +113,19 @@ macro_rules! parse_choice {
     };
 }
 
-fn ask_and_get_degree_subj<R: std::io::Read>(rbuf: &mut BufReader<R>) -> String {
+fn get_document(url: &str) -> Result<Document, minreq::Error> {
+    let books_resp = minreq::get(url).send()?;
+    if books_resp.status_code == 200 {
+        Ok(Document::from(books_resp.as_str()?))
+    } else {
+        eprintln!("ERROR, STATUS CODE: {code}", code = books_resp.status_code);
+        Err(minreq::Error::AddressNotFound)
+    }
+}
+
+fn ask_and_get_degree_subj<R>(rbuf: &mut BufReader<R>) -> Result<(String, Subject), String>
+where R: std::io::Read
+{
     let mut degree = String::new();
     let mut subj   = String::new();
 
@@ -126,25 +138,20 @@ fn ask_and_get_degree_subj<R: std::io::Read>(rbuf: &mut BufReader<R>) -> String 
     }
     println!("Enter a subject");
     read_buf!(rbuf => subj);
-    get_books_from_class!(degree, subj)
-}
-
-fn get_document(url: &str) -> Result<Document, minreq::Error> {
-    let books_resp = minreq::get(url).send()?;
-    if books_resp.status_code == 200 {
-        Ok(Document::from(books_resp.as_str()?))
-    } else {
-        eprintln!("ERROR, STATUS CODE: {code}", code = books_resp.status_code);
-        Err(minreq::Error::AddressNotFound)
+    match subj.parse::<Subject>() {
+        Ok(subj_) => {
+            Ok((get_books_from_class!(degree, subj), subj_))
+        }
+        Err(err) => Err(err)
     }
 }
 
 fn ask_and_get_book<'a, R: std::io::Read>
 (
-    doc: &'a Document,
-    rbuf: &'a mut BufReader<R>,
-    books_ds: &'a mut DataSet::<Book, &'a str, &'a str>,
-    book: &'a Book
+    doc:      &'a Document,
+    rbuf:     &'a mut BufReader<R>,
+    books_ds: &'a mut DataSet::<Subject, &'a str, &'a str>,
+    book:     &'a Subject
 ) -> String {
     books_ds.collect(book_iter, doc, book);
 
@@ -152,7 +159,7 @@ fn ask_and_get_book<'a, R: std::io::Read>
     let books = books_ds.get_from_bucket(book).unwrap_or(&_new_books);
     let books_len = books_ds.sizes.get(book).unwrap_or(&0);
 
-    println!("Books: {books:#?}");
+    println!("Subjects: {books:#?}");
     println!("Which one is yours? from 0 to {books_len}", );
 
     let mut user_choice = String::new();
@@ -167,14 +174,14 @@ fn ask_and_get_book<'a, R: std::io::Read>
 
 fn ask_and_get_no<'a, R: std::io::Read>
 (
-    doc: &'a Document,
-    rbuf: &'a mut BufReader<R>,
-    nos_ds: &'a mut DataSet::<Book, usize, &'a str>,
-    book: &'a Book
+    doc:    &'a Document,
+    rbuf:   &'a mut BufReader<R>,
+    nos_ds: &'a mut DataSet::<Subject, usize, &'a str>,
+    book:   &'a Subject
 ) -> Result<String, String> {
     nos_ds.collect(no_iter, &doc, book);
 
-    let nos_len = nos_ds.sizes.get(&Book::Algebra).unwrap_or(&0);
+    let nos_len = nos_ds.sizes.get(&Subject::Algebra).unwrap_or(&0);
     println!("Now select no., from 0 to {nos_len}");
 
     let mut user_choice = String::new();
@@ -193,8 +200,8 @@ fn ask_and_get_no<'a, R: std::io::Read>
 #[inline]
 fn get_and_save_imgs<'a>
 (
-    doc: &'a Document,
-    imgs_ds: &'a DataSet::<Book, &'a str, &'a str>,
+    doc:     &'a Document,
+    imgs_ds: &'a DataSet::<Subject, &'a str, &'a str>,
 ) -> Result<(), minreq::Error> {
     imgs_ds.collect_imgs(img_iter, &doc, 0)
 }
@@ -202,12 +209,18 @@ fn get_and_save_imgs<'a>
 fn main() -> Result<(), minreq::Error> {
     let mut rbuf = BufReader::new(std::io::stdin().lock());
 
-    let url = ask_and_get_degree_subj(&mut rbuf);
+    let (url, book) = match ask_and_get_degree_subj(&mut rbuf) {
+        Ok((u, b)) => (u, b),
+        Err(err) => {
+            eprintln!("ERROR PARSING SUBJECT TO ENUM: {err}");
+            exit(1);
+        }
+    };
     println!("URL: {url}");
 
-    let mut books_ds = DataSet::<Book, &str, &str>::new();
-    let mut nos_ds   = DataSet::<Book, usize, &str>::new();
-    let     imgs_ds  = DataSet::<Book, &str, &str>::new();
+    let mut books_ds = DataSet::<Subject, &str, &str>::new();
+    let mut nos_ds   = DataSet::<Subject, usize, &str>::new();
+    let     imgs_ds  = DataSet::<Subject, &str, &str>::new();
 
 /* TODO:
 Retrieve elements from buckets, use keys from a hashmap instead of indexing an array.
@@ -215,7 +228,7 @@ Array indexing can fail sometimes, preventing you from obtaining the exact book 
 */
     match get_document(&url) {
         Ok(doc) => {
-            TEST__!(doc, rbuf, books_ds, nos_ds, imgs_ds, Book::Algebra);
+            TEST__!(doc, rbuf, books_ds, nos_ds, imgs_ds, book);
         }
         Err(err) => eprintln!("Failed to get document: {err}")
     }
