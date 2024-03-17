@@ -138,7 +138,7 @@ where R: std::io::Read
     }
     println!("Enter a subject");
     read_buf!(rbuf => subj);
-    match subj.parse::<Subject>() {
+    match subj.trim().parse::<Subject>() {
         Ok(subj_) => {
             Ok((get_books_from_class!(degree, subj), subj_))
         }
