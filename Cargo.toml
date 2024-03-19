@@ -1,11 +1,9 @@
 [package]
 name = "get-gdz"
 version = "0.1.0"
+authors = ["Mark Tyrkba", "marktyrkba456@gmail.com"]
 edition = "2021"
 
 [dependencies]
 minreq = { version = "2.11.0", features = ["native-tls"] }
 select = "0.6.0"
-
-[profile.dev]
-opt-level = 3

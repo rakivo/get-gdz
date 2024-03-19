@@ -35,20 +35,8 @@ impl FromStr for Subject {
 
 const GDZ_URL: &str = "https://gdz.ru";
 
-/*
-...s                -> array
-..._len             -> len int
-..._choice          -> string
-map                 -> map
-
-let mut books       = Vec::new();
-let mut books_len   = 0;
-let mut book_choice = String::new();
-let mut books_map   = HashMap::new();
-*/
-
 macro_rules! TEST__ {
-    ($DOC: ident, $rbuf: ident, $books_ds: ident, $nos_ds: ident, $imgs_ds: ident, $book: expr) =>
+    ($DOC: ident, $rbuf: ident, $books_ds: ident, $nos_ds: ident, $imgs_ds: ident, $book: expr, $start: expr) =>
     {
         {
             let url = ask_and_get_book(&$DOC, &mut $rbuf, &mut $books_ds, &$book);
@@ -64,11 +52,10 @@ macro_rules! TEST__ {
 
                     match get_document(&url) {
                         Ok($DOC) => {
-                            get_and_save_imgs
-                            (
-                                &$DOC, &$imgs_ds
-                            ).map_err(|err| eprintln!("ERROR GETTING AND SAVING IMAGES: {err}"))
-                             .ok();
+                            $imgs_ds
+                                .collect_imgs(img_iter, &$DOC, $start)
+                                .map_err(|err| eprintln!("ERROR GETTING AND SAVING IMAGES: {err}"))
+                                .ok();
                         }
                         Err(err) => eprintln!("Failed to get document: {err}")
                     }
@@ -96,20 +83,17 @@ macro_rules! read_buf {
 
 macro_rules! parse_choice {
     ($choice: expr) => {
-        $choice
-            .trim()
+        $choice.trim()
             .parse::<usize>()
             .expect(&format!("Failed to convert {choice} to usize", choice = $choice))
     };
     (m $($choice: expr), *) => {
         let choices = vec![$($choice), *];
-        choices
-            .iter_mut()
+        choices.iter_mut()
             .map(|x|
                  x.trim()
                  .parse::<usize>()
-                 .expect(&format!("Failed to convert {choice} to usize", choice = $choice))
-            )
+                 .expect(&format!("Failed to convert {choice} to usize", choice = $choice)))
     };
 }
 
@@ -146,13 +130,15 @@ where R: std::io::Read
     }
 }
 
-fn ask_and_get_book<'a, R: std::io::Read>
+fn ask_and_get_book<'a, R>
 (
     doc:      &'a Document,
     rbuf:     &'a mut BufReader<R>,
     books_ds: &'a mut DataSet::<Subject, &'a str, &'a str>,
     book:     &'a Subject
-) -> String {
+) -> String
+where R: std::io::Read
+{
     books_ds.collect(book_iter, doc, book);
 
     let _new_books = Vec::new();
@@ -188,7 +174,7 @@ fn ask_and_get_no<'a, R: std::io::Read>
     read_buf!(rbuf => user_choice);
     let parsed_choice = parse_choice!(user_choice);
     if &parsed_choice >= nos_len {
-        return Err("You can't even manage yourself to select a no within the given range. I'm sorry but I can not help you with that.".to_owned())
+        return Err("You can't even manage yourself to select a no. within the given range. I'm sorry but I can not help you with that.".to_owned())
     }
 
     let url = nos_ds.buckets.get(book).unwrap_or(&Vec::new())[parsed_choice - 1].1;
@@ -197,38 +183,29 @@ fn ask_and_get_no<'a, R: std::io::Read>
     Ok(ret)
 }
 
-#[inline]
-fn get_and_save_imgs<'a>
-(
-    doc:     &'a Document,
-    imgs_ds: &'a DataSet::<Subject, &'a str, &'a str>,
-) -> Result<(), minreq::Error> {
-    imgs_ds.collect_imgs(img_iter, &doc, 0)
-}
-
 fn main() -> Result<(), minreq::Error> {
     let mut rbuf = BufReader::new(std::io::stdin().lock());
 
     let (url, book) = match ask_and_get_degree_subj(&mut rbuf) {
         Ok((u, b)) => (u, b),
-        Err(err) => {
+        Err(err)   => {
             eprintln!("ERROR PARSING SUBJECT TO ENUM: {err}");
             exit(1);
         }
     };
     println!("URL: {url}");
 
-    let mut books_ds = DataSet::<Subject, &str, &str>::new();
+    let mut books_ds = DataSet::<Subject, &str,  &str>::new();
     let mut nos_ds   = DataSet::<Subject, usize, &str>::new();
-    let     imgs_ds  = DataSet::<Subject, &str, &str>::new();
+    let     imgs_ds  = DataSet::<Subject, &str,  &str>::new();
 
 /* TODO:
-Retrieve elements from buckets, use keys from a hashmap instead of indexing an array.
-Array indexing can fail sometimes, preventing you from obtaining the exact book or none at all.
+    Retrieve elements from buckets, use keys from a hashmap instead of indexing an array.
+    Array indexing can fail sometimes, preventing you from obtaining the exact book or none at all.
 */
     match get_document(&url) {
-        Ok(doc) => {
-            TEST__!(doc, rbuf, books_ds, nos_ds, imgs_ds, book);
+        Ok(doc)  => {
+            TEST__!(doc, rbuf, books_ds, nos_ds, imgs_ds, book, 1);
         }
         Err(err) => eprintln!("Failed to get document: {err}")
     }

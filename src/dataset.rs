@@ -61,7 +61,7 @@ where U: Eq + Hash,
     (
         &mut self,
         iterf: F,
-        arg: &'a D,
+        arg:  &'a D,
         buck: &'a U
     )
     where I: Iterator<Item=(T, H)> + 'a,

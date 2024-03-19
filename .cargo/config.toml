@@ -1,0 +1,11 @@
+[alias]
+b  = "build"
+bd = "build"
+br = "build --release"
+rr = "run --release"
+
+[build]
+incremental = true     
+
+[term]
+verbose = true
